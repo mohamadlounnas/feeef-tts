@@ -14,11 +14,11 @@ from src.training.finetune import AlgerianDarjaSpeechDataset, AlgerianTTSFineTun
 def test_text_processor_normalization():
     processor = AlgerianDarjaTextProcessor()
 
-    # Test emotion tag parsing
-    text_with_tag = "[happy] واش راك خويا، لاباس؟"
+    # Test emotion tag parsing and Arabizi conversion
+    text_with_tag = "[happy] واش راك 3في، لاباس؟"
     clean_text, emotion = processor.normalize_darja_text(text_with_tag)
     assert emotion == "happy"
-    assert clean_text == "واش راك خويا، لاباس؟"
+    assert clean_text == "واش راك عفي، لاباس؟"
 
     # Test default neutral emotion
     plain_text = "صحا خويا بزاف شباب"
@@ -28,7 +28,7 @@ def test_text_processor_normalization():
 
 
 def test_audio_preprocessor(tmp_path):
-    # Create dummy WAV audio file (1 second sine wave at 16000Hz)
+    # Create dummy WAV audio file (2 seconds sine wave at 16000Hz)
     sr_orig = 16000
     t = np.linspace(0, 2.0, sr_orig * 2, endpoint=False)
     dummy_signal = 0.5 * np.sin(2 * np.pi * 440 * t)
@@ -52,15 +52,15 @@ def test_audio_preprocessor(tmp_path):
     assert manifests[0]["emotion"] == "happy"
 
 
-def test_tts_engine_synthesis():
-    engine = AlgerianTTSEngine(backend_model="f5tts", sample_rate=24000)
-    result = engine.synthesize(text="[excited] يا خوي صحا بزاف!", speaker_id="algiers_01")
+def test_neural_tts_engine_synthesis():
+    engine = AlgerianTTSEngine(backend_model="mms-ara")
+    result = engine.synthesize(text="[excited] السلام عليكم يا أهل الجزائر", speaker_id="algiers_01")
 
     assert "audio" in result
     assert isinstance(result["audio"], np.ndarray)
     assert len(result["audio"]) > 0
     assert result["emotion"] == "excited"
-    assert result["sample_rate"] == 24000
+    assert result["sample_rate"] == 16000
     assert result["duration"] > 0.5
 
 
