@@ -6,7 +6,7 @@
     "license": "CC-BY-4.0",
     "allowed_use": "research_and_commercial_with_attribution",
     "dialect": "Algerian Darja (+ FR/EN code-switch)",
-    "hours_in_seed_m2": null,
+    "hours_in_seed_m2": 0.7068,
     "transcript_status": "faster-whisper-small draft + light automatic QC (not human-corrected)",
     "notes": "Best open commercial-friendly Algerian conversational speech. Train-eligible."
   },
@@ -16,7 +16,7 @@
     "license": "CC-BY-NC-ND-4.0",
     "allowed_use": "research_eval_only",
     "dialect": "Algerian (Casablanca Algeria split)",
-    "hours_in_seed_m2": 0.75,
+    "hours_in_seed_m2": 0.7504,
     "transcript_status": "human (dataset)",
     "notes": "Listen/reference only. NEVER commercial train."
   },
@@ -27,7 +27,7 @@
     "license": "CC-BY-4.0",
     "allowed_use": "research_and_commercial_with_attribution",
     "dialect": "Moroccan Darija (Maghrebi gap)",
-    "hours_in_seed_m2": null,
+    "hours_in_seed_m2": 0.6634,
     "transcript_status": "dataset labels",
     "notes": "Commercial Maghrebi supplement; dialect gap vs Algiers documented."
   },

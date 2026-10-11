@@ -20,3 +20,4 @@ data/f5_datasets/
 data/seed/moroccan_wiki_ary/wavs/
 *.safetensors
 smoke_report.json
+data/seed/listen_set/ab_out_m2/

@@ -353,8 +353,8 @@ def run_smoke_train(
         report["error"] = f"missing vocab at {vocab_file}"
         return report
 
-    # Build a tiny vocab map for smoke (char)
-    vocab_char_map, vocab_size = get_tokenizer(str(arrow_dir), "custom")
+    # Custom tokenizer expects a vocab.txt *file* path (not the dataset directory).
+    vocab_char_map, vocab_size = get_tokenizer(str(vocab_file), "custom")
     model_cfg = dict(dim=256, depth=4, heads=4, ff_mult=2, text_dim=128, conv_layers=2)
     # Prefer tiny random CFM for smoke on CPU to avoid downloading 1.2B weights
     # unless F5_SMOKE_PRETRAIN=1.
@@ -381,28 +381,21 @@ def run_smoke_train(
             report["pretrain_error"] = str(e)
 
     opt = torch.optim.AdamW(model.parameters(), lr=1e-4)
-    # Synthetic mel/text batch — verifies CFM loss path is real (grad flows).
-    # Shape conventions follow F5 trainer smoke expectations.
-    b, n_mel, t_frames = 2, 100, 64
-    mel = torch.randn(b, n_mel, t_frames, device=device)
-    # text as token ids
-    text_ids = torch.randint(0, max(2, vocab_size), (b, 16), device=device)
+    # CFM expects mel as [batch, time, mel_dim=100]; text as list[str] or token ids.
+    b, t_frames, n_mel = 2, 64, 100
+    mel = torch.randn(b, t_frames, n_mel, device=device)
+    texts = ["واش راك", "يعطيك الصحة"]
     model.train()
     losses = []
     for step in range(steps):
         opt.zero_grad(set_to_none=True)
-        # CFM forward signature varies by version; try common patterns.
-        loss = None
         try:
-            loss, _, _ = model(mel, text=text_ids)
-        except TypeError:
-            try:
-                out = model(mel, text_ids)
-                loss = out[0] if isinstance(out, (tuple, list)) else out
-            except Exception as e:
-                report["error"] = f"CFM forward failed: {e}"
-                logger.exception("smoke forward failed")
-                return report
+            out = model(mel, texts)
+            loss = out[0] if isinstance(out, (tuple, list)) else out
+        except Exception as e:
+            report["error"] = f"CFM forward failed: {e}"
+            logger.exception("smoke forward failed")
+            return report
         if not torch.is_tensor(loss):
             report["error"] = f"loss is not a tensor: {type(loss)}"
             return report

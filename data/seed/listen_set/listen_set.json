@@ -1,0 +1,122 @@
+[
+  {
+    "id": "L01",
+    "ref_audio": "/workspace/repos/feeef-tts/data/seed/listen_set/ref_01.wav",
+    "text": "من رجال الدنيا الكل لقاولها الامير بنيبن علاه",
+    "license": "CC-BY-NC-ND-4.0",
+    "allowed_use": "research_eval_only",
+    "source": "UBC-NLP/Casablanca",
+    "duration": 3.418,
+    "note": "Casablanca Algeria — research_eval_only; not for commercial train"
+  },
+  {
+    "id": "L02",
+    "ref_audio": "/workspace/repos/feeef-tts/data/seed/listen_set/ref_02.wav",
+    "text": "نفكر في موقف الأمير لقمان في هاذ الموضوع",
+    "license": "CC-BY-NC-ND-4.0",
+    "allowed_use": "research_eval_only",
+    "source": "UBC-NLP/Casablanca",
+    "duration": 4.719,
+    "note": "Casablanca Algeria — research_eval_only; not for commercial train"
+  },
+  {
+    "id": "L03",
+    "ref_audio": "/workspace/repos/feeef-tts/data/seed/listen_set/ref_03.wav",
+    "text": "أيا خلاص خلاص روح روح  دوكا روح منا ياخي علبالك بلي لعريس ملزمش يشوف لعروسة قبل العرس",
+    "license": "CC-BY-NC-ND-4.0",
+    "allowed_use": "research_eval_only",
+    "source": "UBC-NLP/Casablanca",
+    "duration": 5.055,
+    "note": "Casablanca Algeria — research_eval_only; not for commercial train"
+  },
+  {
+    "id": "L04",
+    "ref_audio": "/workspace/repos/feeef-tts/data/seed/listen_set/ref_04.wav",
+    "text": "ماتخميش مولاتي بنيبنة راكي عارفة العريسات يسقدوا روحهم او راهي جاية",
+    "license": "CC-BY-NC-ND-4.0",
+    "allowed_use": "research_eval_only",
+    "source": "UBC-NLP/Casablanca",
+    "duration": 5.484,
+    "note": "Casablanca Algeria — research_eval_only; not for commercial train"
+  },
+  {
+    "id": "L05",
+    "ref_audio": "/workspace/repos/feeef-tts/data/seed/listen_set/ref_05.wav",
+    "text": "انا نقلك حاجة ، غير بنتي بعيد الشرغير بنيبن لي تديه وربي كبير",
+    "license": "CC-BY-NC-ND-4.0",
+    "allowed_use": "research_eval_only",
+    "source": "UBC-NLP/Casablanca",
+    "duration": 4.577,
+    "note": "Casablanca Algeria — research_eval_only; not for commercial train"
+  },
+  {
+    "id": "L06",
+    "ref_audio": "/workspace/repos/feeef-tts/data/seed/listen_set/ref_06.wav",
+    "text": "وعلاه ديرلي هكا يا ماريا وعلاه [بكاء]",
+    "license": "CC-BY-NC-ND-4.0",
+    "allowed_use": "research_eval_only",
+    "source": "UBC-NLP/Casablanca",
+    "duration": 3.117,
+    "note": "Casablanca Algeria — research_eval_only; not for commercial train"
+  },
+  {
+    "id": "L07",
+    "ref_audio": "/workspace/repos/feeef-tts/data/seed/listen_set/ref_07.wav",
+    "text": "ايخلاص بنيبن خلاص حنوني ايخلاص ايخلاص ايخلاص شوفتي يا راجا ذاك المكتوب شفتي كيفاش هذاك المكتوب الله غالب مكتبش.",
+    "license": "CC-BY-NC-ND-4.0",
+    "allowed_use": "research_eval_only",
+    "source": "UBC-NLP/Casablanca",
+    "duration": 7.594,
+    "note": "Casablanca Algeria — research_eval_only; not for commercial train"
+  },
+  {
+    "id": "L08",
+    "ref_audio": "/workspace/repos/feeef-tts/data/seed/listen_set/ref_08.wav",
+    "text": "ابرهان برهان وش من برهان يا بنتي علابالك هذيك كوباها عليا هذيك لايدي نتاعي",
+    "license": "CC-BY-NC-ND-4.0",
+    "allowed_use": "research_eval_only",
+    "source": "UBC-NLP/Casablanca",
+    "duration": 4.433,
+    "note": "Casablanca Algeria — research_eval_only; not for commercial train"
+  },
+  {
+    "id": "L09",
+    "ref_audio": "/workspace/repos/feeef-tts/data/seed/listen_set/ref_09.wav",
+    "text": "حتى نتا توحشتك نتا بابا من ختي ولا لالا",
+    "license": "CC-BY-NC-ND-4.0",
+    "allowed_use": "research_eval_only",
+    "source": "UBC-NLP/Casablanca",
+    "duration": 3.007,
+    "note": "Casablanca Algeria — research_eval_only; not for commercial train"
+  },
+  {
+    "id": "L10",
+    "ref_audio": "/workspace/repos/feeef-tts/data/seed/listen_set/ref_10.wav",
+    "text": "انا ثاني بنتي وزيد بنيبن جا باش يريكيبيري شيوا و ربح ولا نسيتي",
+    "license": "CC-BY-NC-ND-4.0",
+    "allowed_use": "research_eval_only",
+    "source": "UBC-NLP/Casablanca",
+    "duration": 5.231,
+    "note": "Casablanca Algeria — research_eval_only; not for commercial train"
+  },
+  {
+    "id": "L11",
+    "ref_audio": "/workspace/repos/feeef-tts/data/seed/listen_set/ref_11.wav",
+    "text": "نقولك حاجة بنتي هذاك لي راكي تشوفي فيه مع شوية ريجيم وشوية فوتينغ أنا نقلك",
+    "license": "CC-BY-NC-ND-4.0",
+    "allowed_use": "research_eval_only",
+    "source": "UBC-NLP/Casablanca",
+    "duration": 5.041,
+    "note": "Casablanca Algeria — research_eval_only; not for commercial train"
+  },
+  {
+    "id": "L12",
+    "ref_audio": "/workspace/repos/feeef-tts/data/seed/listen_set/ref_12.wav",
+    "text": "مولاي ماكان ني عقل ني والو هدا السيد هدا غير ينسى يدي ختي عبلة",
+    "license": "CC-BY-NC-ND-4.0",
+    "allowed_use": "research_eval_only",
+    "source": "UBC-NLP/Casablanca",
+    "duration": 3.976,
+    "note": "Casablanca Algeria — research_eval_only; not for commercial train"
+  }
+]

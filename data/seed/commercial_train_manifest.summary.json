@@ -1,0 +1,26 @@
+{
+  "clips": 1472,
+  "hours_total": 1.3702,
+  "hours_train": 1.2644,
+  "hours_val": 0.1058,
+  "hours_listen": 0.0,
+  "by_source": [
+    {
+      "source": "FatimahEmadEldin/cafe-algerian-codeswitch-speech",
+      "clips": 815,
+      "hours": 0.7068,
+      "license": "CC-BY-4.0",
+      "allowed_use": "research_and_commercial_with_attribution",
+      "dialect": "Algerian_Darja"
+    },
+    {
+      "source": "BrunoHays/DVOICEv2.0-Darija",
+      "clips": 657,
+      "hours": 0.6634,
+      "license": "CC-BY-4.0",
+      "allowed_use": "research_and_commercial_with_attribution",
+      "dialect": "Moroccan_Darija"
+    }
+  ],
+  "allowed_use": "research_and_commercial_with_attribution"
+}
