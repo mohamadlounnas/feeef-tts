@@ -8,7 +8,8 @@ Pipeline:
 4. Invoke ``f5_tts.train.finetune_cli`` with real CFM / flow-matching loss
 
 CPU-only environments: use ``--smoke`` for a tiny forward/backward sanity check
-that still uses real F5 modules (not random.uniform). Full fine-tune needs GPU.
+that still uses real F5 modules (not random.uniform). Full fine-tune needs
+CUDA or Apple MPS (``--train`` / ``--train-mps``).
 """
 
 from __future__ import annotations
@@ -228,7 +229,13 @@ def _find_pretrained_vocab() -> Optional[Path]:
     candidates = [
         Path(os.environ.get("F5_PRETRAINED_VOCAB", "")),
         Path.home() / ".local/share/f5_tts/vocab.txt",
+        REPO_ROOT / "data/f5_datasets/pretrained_vocab.txt",
     ]
+    # Hugging Face hub snapshot for F5TTS_v1_Base (common after cached_path download).
+    hub = Path.home() / ".cache/huggingface/hub"
+    if hub.is_dir():
+        for p in hub.glob("models--SWivid--F5-TTS/snapshots/*/F5TTS_v1_Base/vocab.txt"):
+            candidates.append(p)
     try:
         from importlib.resources import files
 
@@ -243,6 +250,12 @@ def _find_pretrained_vocab() -> Optional[Path]:
                 candidates.append(p)
             except Exception:
                 pass
+    except Exception:
+        pass
+    try:
+        from cached_path import cached_path
+
+        candidates.append(Path(str(cached_path("hf://SWivid/F5-TTS/F5TTS_v1_Base/vocab.txt"))))
     except Exception:
         pass
     for c in candidates:
@@ -322,6 +335,25 @@ def build_finetune_command(
     return cmd
 
 
+def select_train_device(prefer: Optional[str] = None) -> str:
+    """Pick CUDA, then MPS, then CPU. ``prefer`` may force ``cuda|mps|cpu``."""
+    import torch
+
+    if prefer in ("cuda", "mps", "cpu"):
+        if prefer == "cuda" and not torch.cuda.is_available():
+            raise RuntimeError("CUDA requested but torch.cuda.is_available() is False")
+        if prefer == "mps" and not (
+            getattr(torch.backends, "mps", None) and torch.backends.mps.is_available()
+        ):
+            raise RuntimeError("MPS requested but torch.backends.mps.is_available() is False")
+        return prefer
+    if torch.cuda.is_available():
+        return "cuda"
+    if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
 def run_smoke_train(
     arrow_dir: Path,
     steps: int = 2,
@@ -336,7 +368,7 @@ def run_smoke_train(
     """
     import torch
 
-    device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+    device = device or select_train_device()
     report: Dict[str, Any] = {"device": device, "steps": steps, "ok": False}
 
     try:
@@ -424,6 +456,291 @@ def run_full_finetune(cmd: List[str], env: Optional[Dict[str, str]] = None) -> i
     return proc.returncode
 
 
+def _symlink_dataset_for_f5(arrow_dir: Path, dataset_name: str, tokenizer: str = "custom") -> Path:
+    """
+    Upstream ``load_dataset`` resolves
+    ``site-packages/f5_tts/../../data/{dataset_name}_{tokenizer}``.
+    Symlink our prepared arrow dir there.
+    """
+    try:
+        from importlib.resources import files
+
+        target = Path(str(files("f5_tts").joinpath(f"../../data/{dataset_name}_{tokenizer}")))
+    except Exception:
+        target = Path(sys.prefix) / "data" / f"{dataset_name}_{tokenizer}"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.exists() or target.is_symlink():
+        if target.resolve() == arrow_dir.resolve():
+            return target
+        if target.is_symlink() or target.is_dir():
+            if target.is_symlink():
+                target.unlink()
+            else:
+                shutil.rmtree(target)
+    target.symlink_to(arrow_dir.resolve(), target_is_directory=True)
+    logger.info("Symlinked F5 data path %s -> %s", target, arrow_dir)
+    return target
+
+
+def run_mps_finetune(
+    arrow_dir: Path,
+    *,
+    dataset_name: str = "darja_commercial",
+    epochs: int = 1,
+    max_updates: int = 200,
+    batch_frames: int = 256,
+    learning_rate: float = 1e-5,
+    save_dir: Optional[Path] = None,
+    pretrain: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Real pretrained F5TTS_v1_Base fine-tune on Apple MPS (or CUDA).
+
+    Uses upstream CFM + DiT weights and real flow-matching loss, with a
+    memory-tight loop suitable for ~16 GB unified memory. Writes a usable
+    ``model_last.pt`` under ``save_dir``.
+    """
+    import torch
+    import torchaudio
+    from cached_path import cached_path
+    from f5_tts.model import CFM, DiT
+    from f5_tts.model.utils import get_tokenizer
+
+    device = select_train_device()
+    report: Dict[str, Any] = {
+        "ok": False,
+        "device": device,
+        "epochs": epochs,
+        "max_updates": max_updates,
+        "batch_frames": batch_frames,
+    }
+    if device == "cpu":
+        report["error"] = "No CUDA/MPS — refusing full pretrained fine-tune on CPU"
+        return report
+
+    vocab_file = arrow_dir / "vocab.txt"
+    duration_file = arrow_dir / "duration.json"
+    raw_arrow = arrow_dir / "raw.arrow"
+    if not vocab_file.exists():
+        report["error"] = f"missing {vocab_file}"
+        return report
+
+    # Load clip list from arrow or duration sidecar + rebuild from metadata if needed.
+    audio_paths: List[str] = []
+    texts: List[str] = []
+    durations: List[float] = []
+    if raw_arrow.exists():
+        import pyarrow as pa
+
+        with pa.memory_map(str(raw_arrow), "r") as source:
+            table = pa.ipc.RecordBatchFileReader(source).read_all()
+            audio_paths = table.column("audio_path").to_pylist()
+            texts = table.column("text").to_pylist()
+            durations = [float(x) for x in table.column("duration").to_pylist()]
+    elif duration_file.exists():
+        report["error"] = "raw.arrow missing — re-run prepare so MPS trainer can load clips"
+        return report
+    else:
+        report["error"] = "prepared dataset incomplete"
+        return report
+
+    # Keep clips that still exist; drop empty texts.
+    pairs = [
+        (ap, tx, dur)
+        for ap, tx, dur in zip(audio_paths, texts, durations)
+        if Path(ap).exists() and str(tx).strip() and 0.3 <= float(dur) <= 15.0
+    ]
+    if len(pairs) < 8:
+        report["error"] = f"too few usable clips for train: {len(pairs)}"
+        report["pairs"] = len(pairs)
+        return report
+    report["clips"] = len(pairs)
+    report["hours"] = round(sum(p[2] for p in pairs) / 3600.0, 4)
+
+    vocab_char_map, vocab_size = get_tokenizer(str(vocab_file), "custom")
+    model_cfg = dict(dim=1024, depth=22, heads=16, ff_mult=2, text_dim=512, conv_layers=4)
+    mel_spec_kwargs = dict(
+        n_fft=1024,
+        hop_length=256,
+        win_length=1024,
+        n_mel_channels=100,
+        target_sample_rate=24000,
+        mel_spec_type="vocos",
+    )
+    model = CFM(
+        transformer=DiT(**model_cfg, text_num_embeds=vocab_size, mel_dim=100),
+        mel_spec_kwargs=mel_spec_kwargs,
+        vocab_char_map=vocab_char_map,
+    )
+
+    ckpt_path = pretrain or str(cached_path("hf://SWivid/F5-TTS/F5TTS_v1_Base/model_1250000.safetensors"))
+    report["pretrain"] = ckpt_path
+    try:
+        from safetensors.torch import load_file
+
+        raw_state = load_file(ckpt_path, device="cpu")
+    except Exception:
+        raw_state = torch.load(ckpt_path, map_location="cpu")
+        if isinstance(raw_state, dict) and "ema_model_state_dict" in raw_state:
+            raw_state = raw_state["ema_model_state_dict"]
+        elif isinstance(raw_state, dict) and "model" in raw_state:
+            raw_state = raw_state["model"]
+    # Hub safetensors keys are ``ema_model.*``; CFM expects unprefixed names.
+    state = {}
+    for k, v in raw_state.items():
+        nk = k[len("ema_model.") :] if k.startswith("ema_model.") else k
+        if nk.startswith("mel_spec."):
+            continue  # rebuild mel filters on device
+        state[nk] = v
+    # TextEmbedding uses ``nn.Embedding(text_num_embeds + 1)`` (0 = filler).
+    embed_key = "transformer.text_embed.text_embed.weight"
+    target_rows = vocab_size + 1
+    if embed_key in state and state[embed_key].shape[0] != target_rows:
+        old = state[embed_key]
+        new = old.new_zeros(target_rows, old.shape[1])
+        n = min(old.shape[0], target_rows)
+        new[:n] = old[:n]
+        if target_rows > old.shape[0]:
+            torch.nn.init.normal_(new[old.shape[0] :], mean=0.0, std=0.02)
+        state[embed_key] = new
+        report["text_embed_resized"] = [int(old.shape[0]), int(target_rows)]
+    missing, unexpected = model.load_state_dict(state, strict=False)
+    report["load_missing"] = len(missing)
+    report["load_unexpected"] = len(unexpected)
+
+    # float32 on MPS is the reliable path; fp16 often hits unsupported ops.
+    model = model.to(device)
+    model.train()
+    opt = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+
+    save_dir = Path(save_dir or (REPO_ROOT / "ckpts" / dataset_name))
+    save_dir.mkdir(parents=True, exist_ok=True)
+
+    hop = 256
+    sr = 24000
+    losses: List[float] = []
+    updates = 0
+
+    def _load_mel(path: str, max_sec: float = 8.0):
+        wav, file_sr = torchaudio.load(path)
+        wav = wav.mean(dim=0, keepdim=True)
+        if file_sr != sr:
+            wav = torchaudio.functional.resample(wav, file_sr, sr)
+        max_samples = int(max_sec * sr)
+        if wav.shape[-1] > max_samples:
+            wav = wav[..., :max_samples]
+        mel = model.mel_spec(wav.to(device))  # [1, n_mel, time]
+        return mel.squeeze(0).permute(1, 0)  # [time, n_mel]
+
+    rng = torch.Generator()
+    rng.manual_seed(42)
+    try:
+        for epoch in range(epochs):
+            order = torch.randperm(len(pairs), generator=rng).tolist()
+            batch_mels: List[torch.Tensor] = []
+            batch_texts: List[str] = []
+            frame_count = 0
+            for idx in order:
+                if updates >= max_updates:
+                    break
+                ap, tx, _dur = pairs[idx]
+                try:
+                    mel = _load_mel(ap)
+                except Exception as e:
+                    logger.warning("skip %s: %s", ap, e)
+                    continue
+                t_frames = mel.shape[0]
+                if t_frames < 16:
+                    continue
+                # Flush batch when frame budget exceeded.
+                if batch_mels and frame_count + t_frames > batch_frames:
+                    max_t = max(m.shape[0] for m in batch_mels)
+                    n_mel = batch_mels[0].shape[1]
+                    stacked = torch.zeros(len(batch_mels), max_t, n_mel, device=device)
+                    for bi, m in enumerate(batch_mels):
+                        stacked[bi, : m.shape[0]] = m
+                    opt.zero_grad(set_to_none=True)
+                    out = model(stacked, batch_texts)
+                    loss = out[0] if isinstance(out, (tuple, list)) else out
+                    loss.backward()
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                    opt.step()
+                    losses.append(float(loss.detach().cpu()))
+                    updates += 1
+                    if updates % 10 == 0 or updates == 1:
+                        logger.info(
+                            "mps/cuda ft update %d/%d epoch=%d loss=%.4f",
+                            updates,
+                            max_updates,
+                            epoch,
+                            losses[-1],
+                        )
+                    batch_mels, batch_texts, frame_count = [], [], 0
+                    if device == "mps":
+                        torch.mps.empty_cache()
+                batch_mels.append(mel)
+                batch_texts.append(tx)
+                frame_count += t_frames
+            if updates >= max_updates:
+                break
+            # Flush remainder
+            if batch_mels and updates < max_updates:
+                max_t = max(m.shape[0] for m in batch_mels)
+                n_mel = batch_mels[0].shape[1]
+                stacked = torch.zeros(len(batch_mels), max_t, n_mel, device=device)
+                for bi, m in enumerate(batch_mels):
+                    stacked[bi, : m.shape[0]] = m
+                opt.zero_grad(set_to_none=True)
+                out = model(stacked, batch_texts)
+                loss = out[0] if isinstance(out, (tuple, list)) else out
+                loss.backward()
+                opt.step()
+                losses.append(float(loss.detach().cpu()))
+                updates += 1
+    except Exception as e:
+        report["error"] = f"train loop failed: {e}"
+        logger.exception("MPS/CUDA fine-tune failed")
+        # Still try to save partial weights if any steps landed.
+        if updates == 0:
+            return report
+
+    ckpt_out = save_dir / "model_last.pt"
+    torch.save(
+        {
+            "model_state_dict": model.state_dict(),
+            "updates": updates,
+            "losses": losses[-50:],
+            "dataset": dataset_name,
+            "device": device,
+            "vocab": str(vocab_file),
+            "pretrain": ckpt_path,
+        },
+        ckpt_out,
+    )
+    # Also dump safetensors-friendly flat state for F5 infer helpers.
+    try:
+        from safetensors.torch import save_file
+
+        flat = {k: v.detach().cpu() for k, v in model.state_dict().items()}
+        st_path = save_dir / "model_last.safetensors"
+        save_file(flat, str(st_path))
+        report["ckpt_safetensors"] = str(st_path)
+    except Exception as e:
+        report["safetensors_error"] = str(e)
+
+    report["ok"] = updates > 0 and "error" not in report
+    report["updates"] = updates
+    report["final_loss"] = losses[-1] if losses else None
+    report["loss_start"] = losses[0] if losses else None
+    report["ckpt"] = str(ckpt_out)
+    report["note"] = (
+        "Real pretrained F5TTS_v1_Base CFM fine-tune (not smoke tiny DiT). "
+        "Short-run demo weights for listen A/B; not a 50-epoch product train."
+    )
+    logger.info("Fine-tune report: %s", {k: report[k] for k in report if k != "losses"})
+    return report
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     p = argparse.ArgumentParser(description="Commercial Darja → real F5-TTS fine-tune")
     p.add_argument("--manifests", nargs="+", required=True, help="Input JSONL manifests")
@@ -444,8 +761,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--config", default=str(DEFAULT_CONFIG))
     p.add_argument("--prepare-only", action="store_true")
     p.add_argument("--smoke", action="store_true", help="Tiny real CFM train smoke on CPU/GPU")
-    p.add_argument("--train", action="store_true", help="Launch upstream finetune_cli")
+    p.add_argument("--train", action="store_true", help="Launch upstream finetune_cli (CUDA) or MPS loop")
+    p.add_argument(
+        "--train-mps",
+        action="store_true",
+        help="Force memory-tight pretrained fine-tune loop on MPS/CUDA (real weights)",
+    )
     p.add_argument("--smoke-steps", type=int, default=2)
+    p.add_argument("--max-updates", type=int, default=200, help="Cap updates for --train-mps / MPS path")
+    p.add_argument("--batch-frames", type=int, default=256, help="Frame budget per MPS update")
+    p.add_argument("--epochs", type=int, default=None, help="Override config epochs for short demo runs")
     args = p.parse_args(argv)
 
     cfg = _load_yaml(Path(args.config)) if Path(args.config).exists() else {}
@@ -463,12 +788,13 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     arrow_dir = prepare_f5_dataset_dir(rows, Path(args.dataset_root), args.dataset_name)
     vocab = arrow_dir / "vocab.txt"
+    epochs = int(args.epochs if args.epochs is not None else cfg.get("epochs", 50))
     cmd = build_finetune_command(
         args.dataset_name,
         exp_name=str(cfg.get("exp_name", "F5TTS_v1_Base")),
         learning_rate=float(cfg.get("learning_rate", 1e-5)),
         batch_size_per_gpu=int(cfg.get("batch_size_per_gpu", 800)),
-        epochs=int(cfg.get("epochs", 50)),
+        epochs=epochs,
         tokenizer="custom",
         tokenizer_path=str(vocab),
         save_per_updates=int(cfg.get("save_per_updates", 500)),
@@ -499,19 +825,34 @@ def main(argv: Optional[List[str]] = None) -> int:
         if not report.get("ok"):
             return 2
 
-    if args.train:
-        import torch
-
-        if not torch.cuda.is_available():
+    if args.train or args.train_mps:
+        device = select_train_device()
+        if device == "cpu":
             logger.error(
-                "Refusing full --train on CPU-only host. Use --smoke or run TRAIN_COMMAND.sh on GPU. "
-                "Estimate: %s",
+                "Refusing full train on CPU-only host. Need CUDA or Apple MPS. Estimate: %s",
                 gpu_est,
             )
             return 3
-        return run_full_finetune(cmd)
+        # CUDA: prefer upstream finetune_cli unless --train-mps forced.
+        if device == "cuda" and args.train and not args.train_mps:
+            _symlink_dataset_for_f5(arrow_dir, args.dataset_name, tokenizer="custom")
+            return run_full_finetune(cmd)
+        # MPS (or explicit --train-mps): memory-tight real-weight loop.
+        report = run_mps_finetune(
+            arrow_dir,
+            dataset_name=args.dataset_name,
+            epochs=max(1, min(epochs, 3)),
+            max_updates=int(args.max_updates),
+            batch_frames=int(args.batch_frames),
+            learning_rate=float(cfg.get("learning_rate", 1e-5)),
+            pretrain=cfg.get("pretrain"),
+        )
+        report_path = Path(args.dataset_root) / "train_report.json"
+        report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        logger.info("Wrote %s", report_path)
+        return 0 if report.get("ok") else 4
 
-    if args.prepare_only or not (args.smoke or args.train):
+    if args.prepare_only or not (args.smoke or args.train or args.train_mps):
         logger.info("Prepare-only complete.")
     return 0
 

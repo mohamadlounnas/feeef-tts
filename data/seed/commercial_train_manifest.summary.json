@@ -1,18 +1,10 @@
 {
-  "clips": 1472,
-  "hours_total": 1.3702,
-  "hours_train": 1.2644,
-  "hours_val": 0.1058,
+  "clips": 1038,
+  "hours_total": 0.9973,
+  "hours_train": 0.9133,
+  "hours_val": 0.084,
   "hours_listen": 0.0,
   "by_source": [
-    {
-      "source": "FatimahEmadEldin/cafe-algerian-codeswitch-speech",
-      "clips": 815,
-      "hours": 0.7068,
-      "license": "CC-BY-4.0",
-      "allowed_use": "research_and_commercial_with_attribution",
-      "dialect": "Algerian_Darja"
-    },
     {
       "source": "BrunoHays/DVOICEv2.0-Darija",
       "clips": 657,
@@ -20,6 +12,14 @@
       "license": "CC-BY-4.0",
       "allowed_use": "research_and_commercial_with_attribution",
       "dialect": "Moroccan_Darija"
+    },
+    {
+      "source": "FatimahEmadEldin/cafe-algerian-codeswitch-speech",
+      "clips": 381,
+      "hours": 0.3339,
+      "license": "CC-BY-4.0",
+      "allowed_use": "research_and_commercial_with_attribution",
+      "dialect": "Algerian_Darja"
     }
   ],
   "allowed_use": "research_and_commercial_with_attribution"

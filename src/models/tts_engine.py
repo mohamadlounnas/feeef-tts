@@ -78,7 +78,13 @@ class AlgerianTTSEngine:
         self.sample_rate = sample_rate
         self.allow_harmonic_fallback = allow_harmonic_fallback
         self.text_processor = AlgerianDarjaTextProcessor()
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        # Prefer CUDA, then Apple MPS, else CPU (MMS/F5 both run on MPS when available).
+        if torch.cuda.is_available():
+            self.device = "cuda"
+        elif getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+            self.device = "mps"
+        else:
+            self.device = "cpu"
         self.model = None
         self.tokenizer = None
         self._f5 = None
