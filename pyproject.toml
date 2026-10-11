@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "feeef-tts"
+version = "0.2.0"
+description = "Algerian Darja TTS pipeline (MMS baseline + real F5 fine-tune path)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "feeef-arabic-tts contributors" }]
+dependencies = [
+  "numpy>=1.26",
+  "scipy>=1.11",
+  "soundfile>=0.12",
+  "librosa>=0.10",
+  "torch>=2.2",
+  "torchaudio>=2.2",
+  "transformers>=4.40",
+  "sentencepiece>=0.2",
+  "datasets>=3.0",
+  "huggingface_hub>=0.23",
+  "pandas>=2.0",
+  "pyarrow>=14.0",
+  "yt-dlp>=2024.1",
+  "pytest>=8.0",
+  "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+asr = ["openai-whisper>=20231117", "faster-whisper>=1.0"]
+f5 = ["f5-tts>=1.0.0"]
+
+[project.scripts]
+feeef-seed-manifest = "src.dataset.build_seed_manifest:main"
+feeef-eval-listen = "src.eval.listen_ab:main"
+feeef-f5-finetune = "src.training.f5_finetune:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

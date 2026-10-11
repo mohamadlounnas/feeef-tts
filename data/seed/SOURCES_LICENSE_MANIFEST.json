@@ -1,0 +1,52 @@
+[
+  {
+    "source_id": "cafe-algerian-codeswitch",
+    "hf": "FatimahEmadEldin/cafe-algerian-codeswitch-speech",
+    "upstream": "https://doi.org/10.5281/zenodo.16964503",
+    "license": "CC-BY-4.0",
+    "allowed_use": "research_and_commercial_with_attribution",
+    "dialect": "Algerian Darja (+ FR/EN code-switch)",
+    "hours_in_seed_m2": null,
+    "transcript_status": "faster-whisper-small draft + light automatic QC (not human-corrected)",
+    "notes": "Best open commercial-friendly Algerian conversational speech. Train-eligible."
+  },
+  {
+    "source_id": "casablanca-algeria",
+    "hf": "UBC-NLP/Casablanca",
+    "license": "CC-BY-NC-ND-4.0",
+    "allowed_use": "research_eval_only",
+    "dialect": "Algerian (Casablanca Algeria split)",
+    "hours_in_seed_m2": 0.75,
+    "transcript_status": "human (dataset)",
+    "notes": "Listen/reference only. NEVER commercial train."
+  },
+  {
+    "source_id": "dvoice-darija-moroccan",
+    "hf": "BrunoHays/DVOICEv2.0-Darija",
+    "upstream": "https://doi.org/10.5281/zenodo.6342622",
+    "license": "CC-BY-4.0",
+    "allowed_use": "research_and_commercial_with_attribution",
+    "dialect": "Moroccan Darija (Maghrebi gap)",
+    "hours_in_seed_m2": null,
+    "transcript_status": "dataset labels",
+    "notes": "Commercial Maghrebi supplement; dialect gap vs Algiers documented."
+  },
+  {
+    "source_id": "moroccan-darija-wiki-audio",
+    "hf": "atlasia/Moroccan-Darija-Wiki-Audio-Dataset",
+    "license": "CC-BY-4.0",
+    "allowed_use": "not_used_gated",
+    "dialect": "Moroccan Darija",
+    "hours_in_seed_m2": 0,
+    "notes": "Gated on Hub without auth in this environment; skipped."
+  },
+  {
+    "source_id": "hananeek2-algerian-STT-dialect",
+    "hf": "hananeek2/algerian-STT-dialect",
+    "license": "paid / gated (not free)",
+    "allowed_use": "not_used",
+    "dialect": "Algerian Darija",
+    "hours_in_seed_m2": 0,
+    "notes": "Skipped."
+  }
+]

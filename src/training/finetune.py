@@ -1,34 +1,58 @@
-import os
+"""
+Dataset loader and fine-tune entrypoints for Algerian Darja TTS.
+
+Simulated ``random.uniform`` loss / empty checkpoints were removed in M1.
+Real F5 training lives in :mod:`src.training.f5_finetune` (upstream CFM loss).
+"""
+
+from __future__ import annotations
+
 import json
 import logging
-from typing import List, Dict, Any, Optional
-import numpy as np
-import torch
-from torch.utils.data import Dataset, DataLoader
+import os
+from typing import Any, Dict, List, Optional
+
+from torch.utils.data import Dataset
+
+from src.dataset.preprocess import reject_empty_transcripts, require_rights_fields
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+
 class AlgerianDarjaSpeechDataset(Dataset):
     """
     Dataset loader for Algerian Darja voice fine-tuning.
-    Reads manifest json/jsonl entries: audio_filepath, text, duration, speaker_id, emotion.
+
+    Reads JSON / JSONL manifests. Empty transcripts are rejected at load time.
     """
 
-    def __init__(self, manifest_file: str, sample_rate: int = 24000):
+    def __init__(
+        self,
+        manifest_file: str,
+        sample_rate: int = 24000,
+        require_rights: bool = True,
+        allowed_use_filter: Optional[List[str]] = None,
+    ):
         self.sample_rate = sample_rate
-        self.data = []
+        self.data: List[Dict[str, Any]] = []
 
         if os.path.exists(manifest_file):
             with open(manifest_file, "r", encoding="utf-8") as f:
                 if manifest_file.endswith(".jsonl"):
-                    for line in f:
-                        if line.strip():
-                            self.data.append(json.loads(line.strip()))
+                    raw = [json.loads(line) for line in f if line.strip()]
                 else:
-                    self.data = json.load(f)
+                    raw = json.load(f)
+            raw = reject_empty_transcripts(raw)
+            if require_rights:
+                for row in raw:
+                    require_rights_fields(row)
+            if allowed_use_filter:
+                allowed = set(allowed_use_filter)
+                raw = [r for r in raw if r.get("allowed_use") in allowed]
+            self.data = raw
 
-        logger.info(f"Loaded {len(self.data)} speech items from {manifest_file}")
+        logger.info("Loaded %d speech items from %s", len(self.data), manifest_file)
 
     def __len__(self) -> int:
         return len(self.data)
@@ -40,71 +64,77 @@ class AlgerianDarjaSpeechDataset(Dataset):
             "text": item.get("text", ""),
             "speaker_id": item.get("speaker_id", "dz_algiers_01"),
             "emotion": item.get("emotion", "neutral"),
-            "duration": item.get("duration", 0.0)
+            "duration": item.get("duration", 0.0),
+            "license": item.get("license", ""),
+            "allowed_use": item.get("allowed_use", ""),
+            "source": item.get("source", ""),
+            "split": item.get("split", "train"),
         }
 
 
 class AlgerianTTSFineTuner:
     """
-    Fine-tuning loop trainer for adapting TTS models (e.g. F5-TTS / XTTS v2) to Algerian Darja.
-    Includes loss tracking, checkpoint saving, and metric evaluation.
+    Thin facade: points operators at the real F5 entrypoint.
+
+    ``train_epoch`` still refuses simulation. Call
+    ``python -m src.training.f5_finetune`` (or :func:`launch_f5_finetune`) instead.
     """
 
     def __init__(
         self,
         model_name: str = "f5tts",
         checkpoint_dir: str = "checkpoints",
-        learning_rate: float = 1e-4,
-        batch_size: int = 4
+        learning_rate: float = 1e-5,
+        batch_size: int = 4,
     ):
         self.model_name = model_name
         self.checkpoint_dir = checkpoint_dir
         self.lr = learning_rate
         self.batch_size = batch_size
         os.makedirs(self.checkpoint_dir, exist_ok=True)
+        logger.info(
+            "AlgerianTTSFineTuner facade ready (model=%s). "
+            "Use src.training.f5_finetune for real training.",
+            model_name,
+        )
 
-    def train_epoch(self, dataloader: DataLoader, epoch: int) -> Dict[str, float]:
-        """
-        Executes single epoch fine-tuning loop over Algerian speech dataset.
-        """
-        logger.info(f"--- Starting Fine-tuning Epoch {epoch} for backend: {self.model_name} ---")
-        total_loss = 0.0
-        steps = 0
+    def train_epoch(self, dataloader, epoch: int) -> Dict[str, float]:
+        raise NotImplementedError(
+            "Simulated fine-tuning was removed. Run real F5 training via:\n"
+            "  python -m src.training.f5_finetune --manifests <commercial.jsonl> --smoke\n"
+            "  # GPU full train:\n"
+            "  python -m src.training.f5_finetune --manifests ... --train\n"
+            f"(model={self.model_name}, epoch={epoch}, batches={len(dataloader)})"
+        )
 
-        for step, batch in enumerate(dataloader):
-            # Simulated spectral/flow matching reconstruction loss calculation
-            texts = batch["text"]
-            durations = batch["duration"]
+    def save_checkpoint(self, epoch: int, metrics: Dict[str, float], state_dict: Optional[Dict] = None) -> str:
+        if not state_dict:
+            raise ValueError(
+                "Refusing to write empty state_dict checkpoint. Pass real model weights."
+            )
+        import torch
 
-            # Simulated loss calculation based on text batch length and pitch/duration variability
-            batch_loss = float(0.5 / (epoch + 1) + np.random.uniform(0.01, 0.05))
-            total_loss += batch_loss
-            steps += 1
-
-            if step % 5 == 0:
-                logger.info(f"Epoch {epoch} | Step {step}/{len(dataloader)} | Loss: {batch_loss:.4f}")
-
-        avg_loss = total_loss / max(1, steps)
-        logger.info(f"Epoch {epoch} Completed | Average Loss: {avg_loss:.4f}")
-        return {"epoch": epoch, "loss": avg_loss}
-
-    def save_checkpoint(self, epoch: int, metrics: Dict[str, float]) -> str:
-        """
-        Saves fine-tuned model weights and training metadata checkpoint.
-        """
         ckpt_path = os.path.join(self.checkpoint_dir, f"{self.model_name}_algerian_epoch_{epoch}.pt")
-        checkpoint_data = {
-            "epoch": epoch,
-            "model_name": self.model_name,
-            "metrics": metrics,
-            "dialect": "Algiers",
-            "state_dict": {} # Model parameters state
-        }
-        torch.save(checkpoint_data, ckpt_path)
-        logger.info(f"Checkpoint saved successfully to {ckpt_path}")
+        torch.save(
+            {
+                "epoch": epoch,
+                "model_name": self.model_name,
+                "metrics": metrics,
+                "dialect": "Algiers",
+                "state_dict": state_dict,
+            },
+            ckpt_path,
+        )
+        logger.info("Checkpoint saved to %s", ckpt_path)
         return ckpt_path
+
+    def launch_f5_finetune(self, argv: Optional[List[str]] = None) -> int:
+        """Delegate to :mod:`src.training.f5_finetune`."""
+        from src.training.f5_finetune import main as f5_main
+
+        return f5_main(argv)
 
 
 if __name__ == "__main__":
     tuner = AlgerianTTSFineTuner(model_name="f5tts")
-    logger.info("Fine-tuner module ready.")
+    logger.info("Fine-tuner module loaded — real path: python -m src.training.f5_finetune")

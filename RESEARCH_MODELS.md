@@ -1,5 +1,7 @@
 # Research & Evaluation: Modern SOTA Text-to-Speech (TTS) Models for Algerian Darja (Algiers Dialect)
 
+> **Note (M1):** This file is a **candidate ranking / ideas** document only. It does **not** mean F5/XTTS/emotion backends are implemented. See `README.md` for what the code actually does.
+
 ## Overview & Goal
 The objective is to establish an experimental, scalable, and high-quality Text-to-Speech (TTS) pipeline specifically tailored for **Algerian Darja** (starting with the **Algiers / العاصمة** dialect).
 
