@@ -14,6 +14,7 @@ import argparse
 import json
 import logging
 import os
+import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -147,6 +148,20 @@ def save_checkpoint(
         ),
     }
     meta_path = _write_meta(save_dir, meta)
+    # Best-effort refresh of user-facing live progress docs (Project store).
+    try:
+        import subprocess
+
+        prog = REPO_ROOT / "scripts" / "write_train_progress.py"
+        if prog.is_file():
+            subprocess.run(
+                [sys.executable, str(prog), "--meta", str(meta_path)],
+                check=False,
+                capture_output=True,
+                timeout=30,
+            )
+    except Exception:
+        pass
     logger.info("Saved SILMA ckpt updates=%d loss=%.4f -> %s", updates, losses[-1], last)
     return {"last": str(last), "numbered": numbered_path or "", "meta": str(meta_path)}
 
