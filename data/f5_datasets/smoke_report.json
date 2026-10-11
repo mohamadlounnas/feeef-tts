@@ -1,0 +1,10 @@
+{
+  "device": "cpu",
+  "steps": 2,
+  "ok": true,
+  "losses": [
+    2.0306830406188965,
+    1.9885659217834473
+  ],
+  "note": "Real autograd through CFM (tiny DiT). Not a full pretrained fine-tune. Run build_finetune_command() on GPU for product training."
+}
