@@ -26,6 +26,10 @@ STORE_MEDIA = Path(
     "/Users/mohamad/Library/Application Support/Cursor/AgentStores/"
     "cursor_agent_stores/bc-53f9e0f4-71e6-4778-b239-98f1504109bb/files/media/silma-ft-listen-set"
 )
+# Prefer smart-seed merged vocab when present (mac-smart FT); else commercial.
+DEFAULT_VOCAB_FT = REPO / "data/f5_datasets/darja_smart_char/vocab_silma_merged.txt"
+if not DEFAULT_VOCAB_FT.exists():
+    DEFAULT_VOCAB_FT = REPO / "data/f5_datasets/darja_commercial_char/vocab_silma_merged.txt"
 
 
 def _write_wav(path: Path, audio: np.ndarray, sr: int) -> None:
@@ -91,10 +95,16 @@ def main() -> int:
     p.add_argument("--product-lines", default=str(REPO / "data/seed/listen_set/product_lines.json"))
     p.add_argument("--out", default=str(STORE_MEDIA))
     p.add_argument("--silma-pt", default=str(REPO / "ckpts/silma_weights/model.pt"))
-    p.add_argument("--ft-pt", default=str(REPO / "ckpts/silma_darja/model_last.pt"))
+    p.add_argument(
+        "--ft-pt",
+        "--ckpt",
+        dest="ft_pt",
+        default=str(REPO / "ckpts/silma_darja/model_last.pt"),
+        help="Fine-tuned SILMA checkpoint (alias: --ckpt)",
+    )
     p.add_argument(
         "--vocab-ft",
-        default=str(REPO / "data/f5_datasets/darja_commercial_char/vocab_silma_merged.txt"),
+        default=str(DEFAULT_VOCAB_FT),
         help="Vocab used during fine-tune (merged SILMA+local)",
     )
     p.add_argument(
@@ -127,6 +137,14 @@ def main() -> int:
 
     zs_ckpt = _export_infer_ckpt(Path(args.silma_pt), out / "_ckpts" / "silma_zs_infer.pt", use_ema_blob=True)
     ft_ckpt = _export_infer_ckpt(Path(args.ft_pt), out / "_ckpts" / "silma_ft_infer.pt", use_ema_blob=False)
+    # Pull train_meta when present so score_sheet matches this ckpt (e.g. 7000 / 0.4554).
+    train_meta: Dict[str, Any] = {}
+    meta_path = Path(args.ft_pt).resolve().parent / "train_meta.json"
+    if meta_path.exists():
+        try:
+            train_meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except Exception:
+            train_meta = {}
 
     logger.info("Loading SILMA zero-shot (F5TTS_v1_Small + ema, SILMA vocab)…")
     f5_zs = _load_f5_small(zs_ckpt, vocab_zs, use_ema=True, device=device)
@@ -228,9 +246,10 @@ def main() -> int:
         )
     l01_ft_r = recon.get("silma_ft_duration_ratio")
     summary = {
-        "train_updates": 2000,
-        "hours_train": 0.9133,
-        "final_loss": 0.2183,
+        "train_updates": int(train_meta.get("updates") or 0) or None,
+        "hours_train": train_meta.get("hours_train"),
+        "final_loss": train_meta.get("final_loss"),
+        "ckpt": str(Path(args.ft_pt).resolve()),
         "l01_ft_duration_ratio": l01_ft_r,
         "l01_zs_duration_ratio": recon.get("silma_zs_duration_ratio"),
         "product_ft_near_natural": sum(1 for j in judgments if j["ft_near_natural_rate"]),
@@ -242,6 +261,7 @@ def main() -> int:
         ),
         "note": (
             "Auto duration_ratio only — not native MOS. "
+            "Native listen still required. "
             "Paper-reading = ratio ≫ 1 on same-words / product lines."
         ),
     }

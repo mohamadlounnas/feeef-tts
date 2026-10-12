@@ -41,10 +41,13 @@ fi
 
 mkdir -p "$STORE_MEDIA"
 echo "Building listen set -> $STORE_MEDIA"
+# Correct flags: --ft-pt (alias --ckpt) + --silma-pt; vocab must match smart FT.
 python scripts/build_silma_listen_set.py \
   --out "$STORE_MEDIA" \
   --ft-pt ckpts/silma_darja/model_last.pt \
   --silma-pt ckpts/silma_weights/model.pt \
+  --vocab-ft data/f5_datasets/darja_smart_char/vocab_silma_merged.txt \
+  --vocab-zs data/f5_datasets/silma_vocab.txt \
   2>&1 | tee -a logs/mac_smart_listen.log
 
 # Patch status
