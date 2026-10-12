@@ -43,7 +43,8 @@ mkdir -p "$STORE_MEDIA"
 echo "Building listen set -> $STORE_MEDIA"
 python scripts/build_silma_listen_set.py \
   --out "$STORE_MEDIA" \
-  --ckpt ckpts/silma_darja/model_last.pt \
+  --ft-pt ckpts/silma_darja/model_last.pt \
+  --silma-pt ckpts/silma_weights/model.pt \
   2>&1 | tee -a logs/mac_smart_listen.log
 
 # Patch status
