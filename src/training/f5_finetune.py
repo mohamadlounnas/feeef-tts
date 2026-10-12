@@ -76,18 +76,32 @@ def prepare_commercial_manifest(
     output: Path,
     product_lines_json: Optional[str] = None,
     val_fraction: float = 0.08,
+    *,
+    allow_research_prototype: bool = False,
+    prebuilt: bool = False,
 ) -> List[Dict[str, Any]]:
-    rows: List[Dict[str, Any]] = []
-    for p in inputs:
-        rows.extend(load_jsonl(Path(p)))
-    rows = filter_commercial(rows)
-    holdout: List[str] = []
-    if product_lines_json and Path(product_lines_json).exists():
-        holdout = json.loads(Path(product_lines_json).read_text(encoding="utf-8"))
-    rows = assign_splits(rows, val_fraction=val_fraction, listen_holdout_texts=holdout)
-    # Drop any row that failed QC if present
-    rows = [r for r in rows if r.get("qc_pass", True)]
-    write_jsonl(output, rows)
+    """
+    Build (or load) a train manifest.
+
+    When ``prebuilt`` is True, ``output`` is loaded as-is (already filtered/split),
+    empty transcripts are still rejected, and a summary is refreshed.
+    """
+    if prebuilt and output.exists():
+        rows = reject_empty_from_prebuilt(load_jsonl(output))
+        rows = [r for r in rows if r.get("qc_pass", True)]
+        write_jsonl(output, rows)
+    else:
+        rows = []
+        for p in inputs:
+            rows.extend(load_jsonl(Path(p)))
+        rows = filter_commercial(rows, allow_research_prototype=allow_research_prototype)
+        holdout: List[str] = []
+        if product_lines_json and Path(product_lines_json).exists():
+            holdout = json.loads(Path(product_lines_json).read_text(encoding="utf-8"))
+        rows = assign_splits(rows, val_fraction=val_fraction, listen_holdout_texts=holdout)
+        # Drop any row that failed QC if present
+        rows = [r for r in rows if r.get("qc_pass", True)]
+        write_jsonl(output, rows)
     summary = {
         "clips": len(rows),
         "hours_total": round(hours_of(rows), 4),
@@ -95,7 +109,12 @@ def prepare_commercial_manifest(
         "hours_val": round(hours_of([r for r in rows if r["split"] == "val"]), 4),
         "hours_listen": round(hours_of([r for r in rows if r["split"] == "listen"]), 4),
         "by_source": summarize_by_source(rows),
-        "allowed_use": COMMERCIAL_ALLOWED_USE,
+        "allowed_use": (
+            "research_scale_mixed"
+            if allow_research_prototype or prebuilt
+            else COMMERCIAL_ALLOWED_USE
+        ),
+        "prebuilt": prebuilt,
     }
     summary_path = output.with_suffix(".summary.json")
     summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -103,21 +122,38 @@ def prepare_commercial_manifest(
     return rows
 
 
+def reject_empty_from_prebuilt(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Local import wrapper so prebuilt path still bans empty transcripts."""
+    from src.dataset.preprocess import reject_empty_transcripts
+
+    return reject_empty_transcripts(rows)
+
+
 def prepare_f5_dataset_dir(
     rows: List[Dict[str, Any]],
     dataset_root: Path,
     dataset_name: str = "darja_commercial",
+    *,
+    copy_audio: bool = False,
 ) -> Path:
     """
     Write csv/wavs under ``dataset_root/raw_{name}`` and prepare Arrow under
     ``dataset_root/{name}_char`` using char tokenizer (Arabic-friendly vs pinyin).
+
+    Default ``copy_audio=False`` uses symlinks to conserve disk on Mac MPS runs.
     """
     raw_dir = dataset_root / f"raw_{dataset_name}"
-    export_f5_csv_wavs(rows, raw_dir, split="train", copy_audio=True)
+    # Clear prior raw export so stale copies/symlinks cannot mix hours.
+    if raw_dir.exists():
+        shutil.rmtree(raw_dir)
+    export_f5_csv_wavs(rows, raw_dir, split="train", copy_audio=copy_audio)
     # Also dump val metadata for reference (not always consumed by finetune_cli)
     val_rows = [r for r in rows if r.get("split") == "val"]
     if val_rows:
-        export_f5_csv_wavs(val_rows, dataset_root / f"raw_{dataset_name}_val", split="val")
+        val_dir = dataset_root / f"raw_{dataset_name}_val"
+        if val_dir.exists():
+            shutil.rmtree(val_dir)
+        export_f5_csv_wavs(val_rows, val_dir, split="val", copy_audio=copy_audio)
 
     out_arrow = dataset_root / f"{dataset_name}_char"
     _prepare_char_arrow(raw_dir, out_arrow)
@@ -252,12 +288,9 @@ def _find_pretrained_vocab() -> Optional[Path]:
                 pass
     except Exception:
         pass
-    try:
-        from cached_path import cached_path
-
-        candidates.append(Path(str(cached_path("hf://SWivid/F5-TTS/F5TTS_v1_Base/vocab.txt"))))
-    except Exception:
-        pass
+    # Do not call cached_path(hf://SWivid/...) here — it can block prepare on a
+    # multi-GB download. Prefer local/hub-cache candidates only; SILMA path uses
+    # silma-ai/silma-tts vocab via src.training.silma_finetune.
     for c in candidates:
         if c and Path(c).is_file():
             return Path(c)

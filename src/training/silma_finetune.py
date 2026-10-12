@@ -114,15 +114,15 @@ def save_checkpoint(
     tmp = save_dir / "model_last.pt.tmp"
     torch.save(payload, tmp)
     tmp.replace(last)
-    # Keep at most one milestone snapshot every 500 updates to save disk (~650MB each).
+    # Sparse numbered milestones under tight Mac disk (~650MB each).
+    # Keep only the newest one so free headroom stays ≥12 GB.
     numbered_path = None
-    if updates % 500 == 0:
+    if updates % 1000 == 0:
         numbered = save_dir / f"model_{updates}.pt"
         torch.save(payload, numbered)
         numbered_path = str(numbered)
-        # Drop older milestones except the newest two.
         milestones = sorted(save_dir.glob("model_[0-9]*.pt"), key=lambda p: p.stat().st_mtime)
-        for old in milestones[:-2]:
+        for old in milestones[:-1]:
             try:
                 old.unlink()
                 logger.info("Removed old milestone %s (disk)", old.name)
@@ -492,6 +492,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         default=str(REPO_ROOT / "data/seed/commercial_train_manifest.jsonl"),
     )
     p.add_argument(
+        "--prebuilt-manifest",
+        action="store_true",
+        help="Use --commercial-manifest as-is (smart Algerian seed; skip re-filter)",
+    )
+    p.add_argument(
+        "--allow-research-prototype",
+        action="store_true",
+        help="Allow research_prototype_only rows (e.g. darija-dz-tts-v1)",
+    )
+    p.add_argument(
         "--product-lines",
         default=str(REPO_ROOT / "data/seed/listen_set/product_lines.json"),
     )
@@ -514,6 +524,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         args.manifests,
         Path(args.commercial_manifest),
         product_lines_json=args.product_lines if Path(args.product_lines).exists() else None,
+        allow_research_prototype=bool(args.allow_research_prototype or args.prebuilt_manifest),
+        prebuilt=bool(args.prebuilt_manifest),
     )
     train_h = hours_of([r for r in rows if r.get("split") == "train"])
     logger.info("Commercial train hours ≈ %.3f", train_h)

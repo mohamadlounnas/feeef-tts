@@ -19,6 +19,14 @@ logger = logging.getLogger(__name__)
 
 COMMERCIAL_ALLOWED_USE = "research_and_commercial_with_attribution"
 EVAL_ONLY_ALLOWED_USE = "research_eval_only"
+# Mac smart FT / research_scale may include prototype Algerian dialogue corpora.
+RESEARCH_PROTOTYPE_ALLOWED_USE = "research_prototype_only"
+TRAIN_ALLOWED_USES = frozenset(
+    {
+        COMMERCIAL_ALLOWED_USE,
+        RESEARCH_PROTOTYPE_ALLOWED_USE,
+    }
+)
 
 
 def load_jsonl(path: Path) -> List[Dict[str, Any]]:
@@ -37,11 +45,16 @@ def write_jsonl(path: Path, rows: Sequence[Dict[str, Any]]) -> None:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
-def filter_commercial(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Keep commercial-friendly rows with non-empty text and rights fields."""
+def filter_commercial(
+    rows: Iterable[Dict[str, Any]],
+    *,
+    allow_research_prototype: bool = False,
+) -> List[Dict[str, Any]]:
+    """Keep train-eligible rows with non-empty text and rights fields."""
+    allowed = TRAIN_ALLOWED_USES if allow_research_prototype else {COMMERCIAL_ALLOWED_USE}
     kept: List[Dict[str, Any]] = []
     for row in rows:
-        if row.get("allowed_use") != COMMERCIAL_ALLOWED_USE:
+        if row.get("allowed_use") not in allowed:
             continue
         require_rights_fields(row)
         kept.append(row)

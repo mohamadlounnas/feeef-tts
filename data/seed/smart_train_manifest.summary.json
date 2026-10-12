@@ -1,0 +1,40 @@
+{
+  "mode": "mac_smart_algerian_prefer",
+  "clips": 1253,
+  "hours_total": 1.2213,
+  "hours_train": 1.1218,
+  "hours_val": 0.0996,
+  "hours_listen": 0.0,
+  "hours_algerian": 0.834,
+  "algerian_fraction": 0.683,
+  "moroccan_cap_hours": 0.4,
+  "by_source": [
+    {
+      "source": "fares5462/darija-dz-tts-v1",
+      "clips": 489,
+      "hours": 0.5001,
+      "license": "unlisted_on_hub",
+      "allowed_use": "research_prototype_only",
+      "dialect": "Algerian_Darja"
+    },
+    {
+      "source": "BrunoHays/DVOICEv2.0-Darija",
+      "clips": 383,
+      "hours": 0.3873,
+      "license": "CC-BY-4.0",
+      "allowed_use": "research_and_commercial_with_attribution",
+      "dialect": "Moroccan_Darija"
+    },
+    {
+      "source": "FatimahEmadEldin/cafe-algerian-codeswitch-speech",
+      "clips": 381,
+      "hours": 0.3339,
+      "license": "CC-BY-4.0",
+      "allowed_use": "research_and_commercial_with_attribution",
+      "dialect": "Algerian_Darja"
+    }
+  ],
+  "allowed_use": "research_scale_mixed",
+  "prebuilt": true,
+  "empty_transcripts": 0
+}
